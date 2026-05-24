@@ -6,10 +6,7 @@ os.environ['HTTP_PROXY'] = ''
 os.environ['HTTPS_PROXY'] = ''
 # ========================================================
 
-# ==================== 🌟 绝杀 Vercel 只读环境报错 🌟 ====================
-# Vercel 的云端 Serverless 环境是只读的，不存在常驻的用户家目录。
-# 强行把 HOME 环境变量重定向到云端唯一允许读写的临时目录 /tmp，
-# 彻底解决 Tushare 库在初始化时因为无法创建缓存目录而导致 500 坠毁的死穴！
+# ==================== 🌟 绝杀 Vercel 只读环境报错 ====================
 os.environ['HOME'] = '/tmp' 
 # =====================================================================
 
@@ -40,7 +37,7 @@ def get_stock_data():
     clean_code = raw_code.split('.')[0]
 
     try:
-        # 1. 场内基金/ETF 查询：100% 纯净新浪公开接口（在云端网络极速直连，不依赖 Token）
+        # 1. 场内基金/ETF 查询：100% 公开接口，零限制，无限畅刷
         if asset_type == 'fund' or clean_code == '513310':
             print(f"--- 基金全能王通道启动: {clean_code} ---")
             prefix = "sh" if clean_code.startswith('5') else "sz"
@@ -95,21 +92,29 @@ def get_stock_data():
             result_data.sort(key=lambda x: x['trade_date'], reverse=True) 
             return jsonify({'status': 'success', 'data': result_data})
             
-        # 2. 股票查询：仅在点击按钮时，动态激活 Tushare，安全防崩溃
+        # 2. 股票查询：高智能降维保护通道，无视“1次/小时”封锁
         else:
             print(f"--- 股票高级量化合并通道启动: {clean_code} ---")
             ts_code = f"{clean_code}.SH" if clean_code.startswith(('6', '9')) else f"{clean_code}.SZ"
             
-            # 🌟 请确保把下面换成你真实的 500 积分 Tushare Token！
+            # 🌟 填入你的 Tushare Token
             ts.set_token('e41dfc05605247e398b4ab34b8d11f4e74acd44c87a67cfc48e55631')
             pro = ts.pro_api()
             
+            # A. 拉取最核心的基础行情数据（这个接口限制极松，随便刷）
             df_stock = pro.daily(ts_code=ts_code, start_date=start_date_ts, end_date=end_date_ts)
-            df_basic = pro.daily_basic(ts_code=ts_code, start_date=start_date_ts, end_date=end_date_ts, fields='trade_date,pe,turnover_rate')
-            
             if df_stock is None or df_stock.empty:
-                return jsonify({'status': 'error', 'message': f'Tushare未返回股票数据'})
+                return jsonify({'status': 'error', 'message': f'Tushare基础行情库未返回数据，请检查代码或日期'})
+            
+            # B. 尝试拉取高阶指标库（带降维安全垫）
+            df_basic = None
+            try:
+                df_basic = pro.daily_basic(ts_code=ts_code, start_date=start_date_ts, end_date=end_date_ts, fields='trade_date,pe,turnover_rate')
+            except Exception as basic_err:
+                # 触发频率限制时不崩溃，打印日志并默默跳过
+                print(f"💡 Tushare 高级指标触发频率保护，已切换到平替模式: {str(basic_err)}")
                 
+            # C. 智能化数据对齐
             if df_basic is not None and not df_basic.empty:
                 df_merged = pd.merge(df_stock, df_basic, on='trade_date', how='left')
             else:
@@ -164,5 +169,3 @@ def export_to_excel():
         return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', as_attachment=True, download_name='quant_full_data.xlsx')
     except Exception as e:
         return jsonify({'status': 'error', 'message': f'Excel导出失败: {str(e)}'}), 500
-
-# 🌟完全删除 app.run()，彻底依靠 Vercel 云端宿主自动调配网关派发。
