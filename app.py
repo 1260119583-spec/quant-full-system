@@ -6,6 +6,13 @@ os.environ['HTTP_PROXY'] = ''
 os.environ['HTTPS_PROXY'] = ''
 # ========================================================
 
+# ==================== 🌟 绝杀 Vercel 只读环境报错 🌟 ====================
+# Vercel 的云端 Serverless 环境是只读的，不存在常驻的用户家目录。
+# 强行把 HOME 环境变量重定向到云端唯一允许读写的临时目录 /tmp，
+# 彻底解决 Tushare 库在初始化时因为无法创建缓存目录而导致 500 坠毁的死穴！
+os.environ['HOME'] = '/tmp' 
+# =====================================================================
+
 import io
 import time
 import requests
@@ -14,9 +21,6 @@ import tushare as ts
 from flask import Flask, render_template, request, jsonify, send_file
 
 app = Flask(__name__)
-
-# 🌟【重点】：全局禁止任何敏感、耗时、易断连的第三方接口初始化！
-# 确保网页即便在深山老林里，也能秒开展示暗金粒子星空。
 
 @app.route('/')
 def index():
@@ -96,8 +100,7 @@ def get_stock_data():
             print(f"--- 股票高级量化合并通道启动: {clean_code} ---")
             ts_code = f"{clean_code}.SH" if clean_code.startswith(('6', '9')) else f"{clean_code}.SZ"
             
-            # 🌟【动态按需实例化】：将 Tushare 锁死在局部的股票逻辑内！
-            # 别忘了把下面换成你真实的 500 积分 Token！
+            # 🌟 请确保把下面换成你真实的 500 积分 Tushare Token！
             ts.set_token('e41dfc05605247e398b4ab34b8d11f4e74acd44c87a67cfc48e55631')
             pro = ts.pro_api()
             
@@ -162,4 +165,4 @@ def export_to_excel():
     except Exception as e:
         return jsonify({'status': 'error', 'message': f'Excel导出失败: {str(e)}'}), 500
 
-# 🌟【生产环境黄金法则】：完全删除任何 app.run()，完全依靠云端宿主进行网关派发。
+# 🌟完全删除 app.run()，彻底依靠 Vercel 云端宿主自动调配网关派发。
