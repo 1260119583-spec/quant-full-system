@@ -15,9 +15,8 @@ from flask import Flask, render_template, request, jsonify, send_file
 
 app = Flask(__name__)
 
-# ==================== 必须填入你的真实 Tushare Token ====================
-ts.set_token('e41dfc05605247e398b4ab34b8d11f4e74acd44c87a67cfc48e55631')
-pro = ts.pro_api()
+# 🌟【重点】：全局禁止任何敏感、耗时、易断连的第三方接口初始化！
+# 确保网页即便在深山老林里，也能秒开展示暗金粒子星空。
 
 @app.route('/')
 def index():
@@ -37,7 +36,7 @@ def get_stock_data():
     clean_code = raw_code.split('.')[0]
 
     try:
-        # 1. 场内基金/ETF 查询：新浪核心流 + 后端动态量化引擎
+        # 1. 场内基金/ETF 查询：100% 纯净新浪公开接口（在云端网络极速直连，不依赖 Token）
         if asset_type == 'fund' or clean_code == '513310':
             print(f"--- 基金全能王通道启动: {clean_code} ---")
             prefix = "sh" if clean_code.startswith('5') else "sz"
@@ -55,15 +54,13 @@ def get_stock_data():
             json_str = text[text.find("["):text.rfind("]")+1]
             df_sina = pd.read_json(io.StringIO(json_str))
             
-            # 由于需要计算涨跌幅和振幅（需要用到前一日收盘价），先在完整序列上进行纵向计算
-            df_sina = df_sina.sort_values(by='day', ascending=True) # 正序计算
+            df_sina = df_sina.sort_values(by='day', ascending=True) 
             df_sina['prev_close'] = df_sina['close'].shift(1)
             
             result_data = []
             for _, row_data in df_sina.iterrows():
                 item_date_raw = str(row_data['day']).split(' ')[0]
                 
-                # 日期范围过滤
                 if start_date_raw <= item_date_raw <= end_date_raw:
                     close_price = float(row_data['close'])
                     open_price = float(row_data['open'])
@@ -71,7 +68,6 @@ def get_stock_data():
                     low_price = float(row_data['low'])
                     prev_close = row_data['prev_close']
                     
-                    # 自动推导量化核心指标
                     if pd.notna(prev_close) and prev_close > 0:
                         pct_chg = (close_price - prev_close) / prev_close * 100
                         amplitude = (high_price - low_price) / prev_close * 100
@@ -79,10 +75,7 @@ def get_stock_data():
                         pct_chg = (close_price - open_price) / open_price * 100
                         amplitude = (high_price - low_price) / open_price * 100
                     
-                    # 成交额转为“亿元”
                     amount_yc = float(row_data['volume']) * close_price / 100000000.0
-                    
-                    # 智能化反向推导溢价率
                     premium_rate = (close_price % 0.02) / 1.5 * 100
                     if premium_rate > 3.0: premium_rate = 0.42
 
@@ -91,25 +84,24 @@ def get_stock_data():
                         'ts_code': f"{clean_code}.SH" if prefix == 'sh' else f"{clean_code}.SZ",
                         'open': open_price, 'high': high_price, 'low': low_price, 'close': close_price,
                         'vol': int(row_data['volume']) // 100,
-                        'amount': f"{amount_yc:.3f}亿",
-                        'pct_chg': f"{pct_chg:+.2f}%",
-                        'amplitude': f"{amplitude:.2f}%",
-                        'pe': '—', 
-                        'turnover': '—', # 基金公开接口不常设单体真实换手率，用杠占位
-                        'premium': f"{premium_rate:.2f}%"
+                        'amount': f"{amount_yc:.3f}亿", 'pct_chg': f"{pct_chg:+.2f}%", 'amplitude': f"{amplitude:.2f}%",
+                        'pe': '—', 'turnover': '—', 'premium': f"{premium_rate:.2f}%"
                     })
             
-            result_data.sort(key=lambda x: x['trade_date'], reverse=True) # 恢复最新倒序
+            result_data.sort(key=lambda x: x['trade_date'], reverse=True) 
             return jsonify({'status': 'success', 'data': result_data})
             
-        # 2. 股票查询：Tushare 双联深度融合（行情 + 换手率 + 市盈率 + 涨跌幅 + 成交额）
+        # 2. 股票查询：仅在点击按钮时，动态激活 Tushare，安全防崩溃
         else:
             print(f"--- 股票高级量化合并通道启动: {clean_code} ---")
             ts_code = f"{clean_code}.SH" if clean_code.startswith(('6', '9')) else f"{clean_code}.SZ"
             
-            # 拉取基础行情
+            # 🌟【动态按需实例化】：将 Tushare 锁死在局部的股票逻辑内！
+            # 别忘了把下面换成你真实的 500 积分 Token！
+            ts.set_token('e41dfc05605247e398b4ab34b8d11f4e74acd44c87a67cfc48e55631')
+            pro = ts.pro_api()
+            
             df_stock = pro.daily(ts_code=ts_code, start_date=start_date_ts, end_date=end_date_ts)
-            # 拉取高阶每日指标（追加换手率 turnover_rate）
             df_basic = pro.daily_basic(ts_code=ts_code, start_date=start_date_ts, end_date=end_date_ts, fields='trade_date,pe,turnover_rate')
             
             if df_stock is None or df_stock.empty:
@@ -127,25 +119,18 @@ def get_stock_data():
                 pe_val = row.get('pe')
                 to_val = row.get('turnover_rate')
                 pct_val = float(row['pct_chg'])
-                amt_yc = float(row['amount']) / 10000.0 # Tushare成交额单位是千元，除以10000转为亿元
+                amt_yc = float(row['amount']) / 10000.0 
                 
-                # 计算股票振幅
                 open_p, high_p, low_p, close_p = float(row['open']), float(row['high']), float(row['low']), float(row['close'])
-                # 反推前一日收盘
                 denom = close_p / (1 + pct_val / 100) if pct_val != -100 else open_p
                 amp = (high_p - low_p) / denom * 100 if denom > 0 else 0.0
 
                 result_data.append({
-                    'trade_date': str(row['trade_date']),
-                    'ts_code': str(row['ts_code']),
-                    'open': open_p, 'high': high_p, 'low': low_p, 'close': close_p,
-                    'vol': int(row['vol']),
-                    'amount': f"{amt_yc:.3f}亿",
-                    'pct_chg': f"{pct_val:+.2f}%",
-                    'amplitude': f"{amp:.2f}%",
+                    'trade_date': str(row['trade_date']), 'ts_code': str(row['ts_code']),
+                    'open': open_p, 'high': high_p, 'low': low_p, 'close': close_p, 'vol': int(row['vol']),
+                    'amount': f"{amt_yc:.3f}亿", 'pct_chg': f"{pct_val:+.2f}%", 'amplitude': f"{amp:.2f}%",
                     'pe': f"{float(pe_val):.2f}" if pd.notna(pe_val) else "—",
-                    'turnover': f"{float(to_val):.2f}%" if pd.notna(to_val) else "—",
-                    'premium': '—'
+                    'turnover': f"{float(to_val):.2f}%" if pd.notna(to_val) else "—", 'premium': '—'
                 })
                 
             return jsonify({'status': 'success', 'data': result_data})
@@ -177,3 +162,4 @@ def export_to_excel():
     except Exception as e:
         return jsonify({'status': 'error', 'message': f'Excel导出失败: {str(e)}'}), 500
 
+# 🌟【生产环境黄金法则】：完全删除任何 app.run()，完全依靠云端宿主进行网关派发。
