@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>量化金融全真行情系统 — Pro Edition</title>
+    <link href="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow-x: hidden; background-color: #0b0c10; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        #particle-canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; }
+        .main-wrapper { position: relative; z-index: 2; padding-top: 40px; padding-bottom: 40px; max-width: 1300px; margin: 0 auto; }
+        .brand-watermark {
+            position: fixed; top: 15px; right: 25px; z-index: 9999; font-size: 15px; font-weight: 800; letter-spacing: 2px; color: #d4af37;
+            text-shadow: 0 0 10px rgba(212, 175, 55, 0.6); font-family: 'Courier New', Courier, monospace;
+            border: 1px solid rgba(212, 175, 55, 0.4); padding: 4px 12px; border-radius: 4px; background: rgba(11, 12, 16, 0.85); backdrop-filter: blur(5px);
+        }
+        h2, h5, label, th { color: #d4af37 !important; text-shadow: 0 0 8px rgba(212,175,55,0.2); }
+        .card { 
+            background: rgba(31, 40, 51, 0.8) !important; border: 1px solid rgba(212, 175, 55, 0.2) !important; 
+            border-radius: 12px; box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5); backdrop-filter: blur(8px);
+        }
+        .form-select, .form-control { background-color: rgba(11, 12, 16, 0.7) !important; border: 1px solid rgba(212, 175, 55, 0.25) !important; color: #f3f4f6 !important; }
+        .form-select:focus, .form-control:focus { border-color: #d4af37 !important; box-shadow: 0 0 0 0.25rem rgba(212, 175, 55, 0.15) !important; }
+        .table-container { max-height: 520px; overflow-y: auto; border-radius: 8px; }
+        .table { --bs-table-bg: transparent !important; color: #e5e7eb !important; border-color: rgba(212, 175, 55, 0.1) !important; font-size: 13px; }
+        .table-dark { --bs-table-bg: rgba(11, 12, 16, 0.95) !important; }
+        .table-striped>tbody>tr:nth-of-type(odd) { --bs-table-accent-bg: rgba(255, 255, 255, 0.02) !important; }
+        .table-hover>tbody>tr:hover { --bs-table-accent-bg: rgba(212, 175, 55, 0.06) !important; }
+        
+        /* 经典量化多空控色方案 */
+        .bull-red { color: #ff4d4d !important; font-weight: bold; } /* 华丽红涨 */
+        .bear-green { color: #2ecc71 !important; font-weight: bold; } /* 炫酷绿跌 */
+        .gold-highlight { color: #f1c40f !important; font-weight: bold; }
+        
+        .btn-gold-primary { background: linear-gradient(135deg, #e67e22, #d4af37); border: none; color: #111 !important; font-weight: bold; }
+        .btn-gold-primary:hover { background: linear-gradient(135deg, #d4af37, #f1c40f); box-shadow: 0 0 15px rgba(212,175,55,0.4); }
+        .btn-gold-success { background: transparent; border: 2px solid #2ecc71; color: #2ecc71 !important; font-weight: bold; }
+        .btn-gold-success:hover:not(:disabled) { background: #2ecc71; color: #111 !important; box-shadow: 0 0 15px rgba(46,204,113,0.3); }
+    </style>
+</head>
+<body>
+
+    <canvas id="particle-canvas"></canvas>
+    <div class="brand-watermark">Made By YYF</div>
+
+    <div class="container main-wrapper">
+        <h2 class="text-center mb-4 fw-bold">📈 股票 & 场内基金量化研判系统</h2>
+        
+        <div class="card p-4 mb-4">
+            <div class="row g-3">
+                <div class="col-md-2">
+                    <label class="form-label fw-semibold">资产类型</label>
+                    <select id="assetType" class="form-select">
+                        <option value="stock">股票 (Tushare通道)</option>
+                        <option value="fund">场内基金/ETF (新浪通道)</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label fw-semibold">证券代码</label>
+                    <input type="text" id="tsCode" class="form-control" placeholder="513310 / 600519">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">开始日期</label>
+                    <input type="date" id="startDate" class="form-control" value="2026-05-01">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">结束日期</label>
+                    <input type="date" id="endDate" class="form-control" value="2026-05-24">
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button id="queryBtn" class="btn btn-gold-primary w-100 py-2">云端矩阵检索</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="card p-4">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="m-0 fw-bold">📊 核心多空研判看板</h5>
+                <button id="exportBtn" class="btn btn-gold-success px-4" disabled>🟢 导出全要素 Excel</button>
+            </div>
+            
+            <div class="table-container">
+                <table class="table table-striped table-hover align-middle text-center">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>交易日期</th>
+                            <th>证券代码</th>
+                            <th>收盘价</th>
+                            <th>涨跌幅</th>
+                            <th>当日振幅</th>
+                            <th>成交额</th>
+                            <th>开盘价</th>
+                            <th>最高价</th>
+                            <th>最低价</th>
+                            <th style="color: #e74c3c !important;">市盈率(PE)</th>
+                            <th style="color: #3498db !important;">换手率</th>
+                            <th style="color: #9b59b6 !important;">场内溢价率</th>
+                        </tr>
+                    </thead>
+                    <tbody id="resultBody">
+                        <tr>
+                            <td colspan="12" class="text-center text-muted py-5">量化总线就绪，请输入代码建立检索波段</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('particle-canvas'); const ctx = canvas.getContext('2d'); let particles = [];
+        function resizeCanvas() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+        window.addEventListener('resize', resizeCanvas); resizeCanvas();
+        class Particle {
+            constructor() {
+                this.x = Math.random() * canvas.width; this.y = Math.random() * canvas.height;
+                this.size = Math.random() * 1.8 + 0.5; this.speedX = Math.random() * 0.4 - 0.2; this.speedY = Math.random() * 0.4 - 0.2;
+                this.color = Math.random() > 0.5 ? 'rgba(214, 175, 55, 0.3)' : 'rgba(243, 156, 18, 0.15)';
+            }
+            update() { this.x += this.speedX; this.y += this.speedY; if (this.x > canvas.width || this.x < 0) this.speedX = -this.speedX; if (this.y > canvas.height || this.y < 0) this.speedY = -this.speedY; }
+            draw() { ctx.fillStyle = this.color; ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2); ctx.fill(); }
+        }
+        function initParticles() { particles = []; const pCount = Math.min(Math.floor(canvas.width / 10), 120); for(let i=0; i<pCount; i++) particles.push(new Particle()); }
+        initParticles();
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height); particles.forEach(p => { p.update(); p.draw(); });
+            for (let i = 0; i < particles.length; i++) {
+                for (let j = i; j < particles.length; j++) {
+                    const d = Math.hypot(particles[i].x - particles[j].x, particles[i].y - particles[j].y);
+                    if (d < 110) { ctx.strokeStyle = `rgba(214, 175, 55, ${0.12 - d/110})`; ctx.lineWidth = 0.5; ctx.beginPath(); ctx.moveTo(particles[i].x, particles[i].y); ctx.lineTo(particles[j].x, particles[j].y); ctx.stroke(); }
+                }
+            }
+            requestAnimationFrame(animate);
+        }
+        animate();
+    </script>
+
+    <script>
+        let currentData = [];
+
+        document.getElementById('queryBtn').addEventListener('click', async () => {
+            const assetType = document.getElementById('assetType').value;
+            const tsCode = document.getElementById('tsCode').value.trim();
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+
+            if(!tsCode) { alert('核心中枢提示：请输入证券代码！'); return; }
+
+            const queryBtn = document.getElementById('queryBtn');
+            queryBtn.disabled = true;
+            queryBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 矩阵解算中...';
+
+            try {
+                const res = await fetch('/api/stock', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ asset_type: assetType, ts_code: tsCode, start_date: startDate, end_date: endDate })
+                });
+                const result = await res.json();
+                
+                if(result.status === 'success') {
+                    currentData = result.data;
+                    renderTable(currentData);
+                    document.getElementById('exportBtn').disabled = false;
+                } else {
+                    alert(result.message);
+                }
+            } catch (e) {
+                alert('核心通道溢出: ' + e);
+            } finally {
+                queryBtn.disabled = false;
+                queryBtn.innerHTML = '云端矩阵检索';
+            }
+        });
+
+        function renderTable(data) {
+            const tbody = document.getElementById('resultBody');
+            if(data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="12" class="text-center text-muted">检索周期内交易日空白</td></tr>';
+                return;
+            }
+            tbody.innerHTML = data.map(row => {
+                // 智能多空着色判断
+                const isUp = row.pct_chg.startsWith('+');
+                const isZero = row.pct_chg.startsWith('+0.00') || row.pct_chg.startsWith('-0.00');
+                const colorClass = isZero ? '' : (isUp ? 'bull-red' : 'bear-green');
+
+                return `
+                    <tr>
+                        <td class="fw-semibold text-warning">${row.trade_date}</td>
+                        <td><span class="badge bg-dark border border-warning text-warning">${row.ts_code}</span></td>
+                        <td class="gold-highlight">${row.close.toFixed(2)}</td>
+                        <td class="${colorClass}">${row.pct_chg}</td>
+                        <td class="text-white-50">${row.amplitude}</td>
+                        <td class="text-info">${row.amount}</td>
+                        <td>${row.open.toFixed(2)}</td>
+                        <td>${row.high.toFixed(2)}</td>
+                        <td>${row.low.toFixed(2)}</td>
+                        <td class="text-danger fw-bold">${row.pe}</td>
+                        <td style="color: #3498db !important; font-weight: bold;">${row.turnover}</td>
+                        <td style="color: #9b59b6 !important; font-weight: bold;">${row.premium}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        document.getElementById('exportBtn').addEventListener('click', async () => {
+            if(currentData.length === 0) return;
+            try {
+                const response = await fetch('/api/export', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ data: currentData })
+                });
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `YYF_全要素量化看板_${document.getElementById('tsCode').value}.xlsx`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+            } catch (e) {
+                alert('数据导出总线阻断: ' + e);
+            }
+        });
+    </script>
+</body>
+</html>
