@@ -177,5 +177,3 @@ def export_to_excel():
     except Exception as e:
         return jsonify({'status': 'error', 'message': f'Excel导出失败: {str(e)}'}), 500
 
-# 移除 if __name__ 判断，直接把全局实例抛给 Vercel 接管
-app.run(debug=True)
